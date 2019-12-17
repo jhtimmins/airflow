@@ -571,8 +571,8 @@ def dag_state(args):
     running
     """
     dag = get_dag(args)
-    dr = DagRun.find(dag.dag_id, execution_date=args.execution_date)
-    print(dr[0].state if len(dr) > 0 else None)
+    dr = DagRun.find(dag.dag_id, execution_date=args.execution_date).one_or_none()
+    print(dr.state if dr else None)
 
 
 @cli_utils.action_logging

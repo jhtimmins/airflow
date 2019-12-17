@@ -711,7 +711,7 @@ class Airflow(AirflowViewMixin, BaseView):
             state=State.RUNNING,
             external_trigger=False,
             session=session
-        )
+        ).all()
 
         return self.render(
             'airflow/dag_details.html',
@@ -1182,7 +1182,7 @@ class Airflow(AirflowViewMixin, BaseView):
         execution_date = timezone.utcnow()
         run_id = "manual__{0}".format(execution_date.isoformat())
 
-        dr = DagRun.find(dag_id=dag_id, run_id=run_id)
+        dr = DagRun.find(dag_id=dag_id, run_id=run_id).one_or_none()
         if dr:
             flash("This run_id {} already exists".format(run_id))
             return redirect(origin)

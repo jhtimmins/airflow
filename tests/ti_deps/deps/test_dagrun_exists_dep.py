@@ -27,11 +27,12 @@ from airflow.ti_deps.deps.dagrun_exists_dep import DagrunRunningDep
 
 class DagrunRunningDepTest(unittest.TestCase):
 
-    @patch('airflow.models.DagRun.find', return_value=())
+    @patch('airflow.models.DagRun.find')
     def test_dagrun_doesnt_exist(self, dagrun_find):
         """
         Task instances without dagruns should fail this dep
         """
+        dagrun_find.return_value.count = Mock(return_value=0)
         dag = DAG('test_dag', max_active_runs=2)
         ti = Mock(task=Mock(dag=dag), get_dagrun=Mock(return_value=None))
         self.assertFalse(DagrunRunningDep().is_met(ti=ti))

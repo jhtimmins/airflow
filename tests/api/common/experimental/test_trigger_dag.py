@@ -37,27 +37,25 @@ class TriggerDagTests(unittest.TestCase):
             _trigger_dag,
             'dag_not_found',
             dag_bag_mock,
-            dag_run_mock,
             run_id=None,
             conf=None,
             execution_date=None,
             replace_microseconds=True,
         )
 
-    @mock.patch('airflow.models.DagRun')
+    @mock.patch('airflow.api.common.experimental.trigger_dag.DagRun')
     @mock.patch('airflow.models.DagBag')
     def test_trigger_dag_dag_run_exist(self, dag_bag_mock, dag_run_mock):
         dag_id = "dag_run_exist"
         dag = DAG(dag_id)
         dag_bag_mock.dags = [dag_id]
         dag_bag_mock.get_dag.return_value = dag
-        dag_run_mock.find.return_value = DagRun()
+        dag_run_mock.find.one_or_none.return_value = DagRun()
         self.assertRaises(
             AirflowException,
             _trigger_dag,
             dag_id,
             dag_bag_mock,
-            dag_run_mock,
             run_id=None,
             conf=None,
             execution_date=None,
@@ -81,7 +79,6 @@ class TriggerDagTests(unittest.TestCase):
         triggers = _trigger_dag(
             dag_id,
             dag_bag_mock,
-            dag_run_mock,
             run_id=None,
             conf=None,
             execution_date=None,
@@ -96,11 +93,9 @@ class TriggerDagTests(unittest.TestCase):
         dag_bag_mock.dags = [dag_id]
         dag_bag_mock.get_dag.return_value = dag
         conf = "{\"foo\": \"bar\"}"
-        dag_run = DagRun()
         triggers = _trigger_dag(
             dag_id,
             dag_bag_mock,
-            dag_run,
             run_id=None,
             conf=conf,
             execution_date=None,
@@ -115,11 +110,9 @@ class TriggerDagTests(unittest.TestCase):
         dag_bag_mock.dags = [dag_id]
         dag_bag_mock.get_dag.return_value = dag
         conf = dict(foo="bar")
-        dag_run = DagRun()
         triggers = _trigger_dag(
             dag_id,
             dag_bag_mock,
-            dag_run,
             run_id=None,
             conf=conf,
             execution_date=None,

@@ -30,7 +30,6 @@ from airflow.utils.state import State
 def _trigger_dag(
         dag_id,  # type: str
         dag_bag,  # type: DagBag
-        dag_run,  # type: DagModel
         run_id,  # type: Optional[str]
         conf,  # type: Optional[Union[dict, str]]
         execution_date,  # type: Optional[datetime]
@@ -41,7 +40,6 @@ def _trigger_dag(
 
     :param dag_id: DAG ID
     :param dag_bag: DAG Bag model
-    :param dag_run: DAG Run model
     :param run_id: ID of the dag_run
     :param conf: configuration
     :param execution_date: date of execution
@@ -63,7 +61,7 @@ def _trigger_dag(
     if not run_id:
         run_id = "manual__{0}".format(execution_date.isoformat())
 
-    dag_run_id = dag_run.find(dag_id=dag_id, run_id=run_id)
+    dag_run_id = DagRun.find(dag_id=dag_id, run_id=run_id).one_or_none()
     if dag_run_id:
         raise DagRunAlreadyExists("Run id {} already exists for dag id {}".format(
             run_id,
@@ -115,10 +113,8 @@ def trigger_dag(
     if dag_model is None:
         raise DagNotFound("Dag id {} not found in DagModel".format(dag_id))
     dagbag = DagBag(dag_folder=dag_model.fileloc)
-    dag_run = DagRun()
     triggers = _trigger_dag(
         dag_id=dag_id,
-        dag_run=dag_run,
         dag_bag=dagbag,
         run_id=run_id,
         conf=conf,

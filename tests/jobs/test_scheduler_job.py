@@ -48,7 +48,7 @@ from airflow.utils.dag_processing import SimpleDag, SimpleDagBag, list_py_file_p
 from airflow.utils.dates import days_ago
 from airflow.utils.db import create_session, provide_session
 from airflow.utils.state import State
-from tests.compat import MagicMock, Mock, PropertyMock, patch
+from tests.compat import MagicMock, PropertyMock, patch
 from tests.compat import mock
 from tests.core import TEST_DAG_FOLDER
 from tests.executors.test_executor import TestExecutor
@@ -1125,8 +1125,7 @@ class SchedulerJobTest(unittest.TestCase):
             self.assertEqual(ti.state, expected_state)
 
         # load dagrun
-        dr = DagRun.find(dag_id=dag_id, execution_date=ex_date)
-        dr = dr[0]
+        dr = DagRun.find(dag_id=dag_id, execution_date=ex_date).one()
         dr.dag = dag
 
         self.assertEqual(dr.state, dagrun_state)
@@ -1188,7 +1187,7 @@ class SchedulerJobTest(unittest.TestCase):
             ti = dr.get_task_instance('test_dagrun_unfinished', session=session)
             ti.state = State.NONE
             session.commit()
-        dr_state = dr.update_state()
+        dr_state, _ = dr.update_state()
         self.assertEqual(dr_state, State.RUNNING)
 
     def test_dagrun_root_after_dagrun_unfinished(self):
@@ -1206,7 +1205,8 @@ class SchedulerJobTest(unittest.TestCase):
             subdir=dag.fileloc)
         scheduler.run()
 
-        first_run = DagRun.find(dag_id=dag_id, execution_date=DEFAULT_DATE)[0]
+        first_run = DagRun.find(dag_id=dag_id, execution_date=DEFAULT_DATE).one()
+        first_run.dag = dag
         ti_ids = [(ti.task_id, ti.state) for ti in first_run.get_task_instances()]
 
         self.assertEqual(ti_ids, [('current', State.SUCCESS)])
@@ -1400,12 +1400,13 @@ class SchedulerJobTest(unittest.TestCase):
                 ti.start_date = start_date
                 ti.end_date = end_date
 
-        mock_list = Mock()
-        scheduler._process_task_instances(dag, task_instances_list=mock_list)
-
-        mock_list.append.assert_called_with(
-            (dag.dag_id, dag_task1.task_id, DEFAULT_DATE, TRY_NUMBER)
-        )
+            # and schedule them in, so we can check how many
+            # tasks are put on the task_instances_list (should be one, not 3)
+            tis = scheduler._process_task_instances(dag, session=session)
+            self.assertEqual(
+                list(map(lambda ti: ti.key, tis)),
+                [(dag.dag_id, dag_task1.task_id, DEFAULT_DATE, TRY_NUMBER)]
+            )
 
     def test_scheduler_do_not_schedule_removed_task(self):
         dag = DAG(
@@ -1432,10 +1433,9 @@ class SchedulerJobTest(unittest.TestCase):
             dag_id='test_scheduler_do_not_schedule_removed_task',
             start_date=DEFAULT_DATE)
 
-        mock_list = Mock()
-        scheduler._process_task_instances(dag, task_instances_list=mock_list)
-
-        mock_list.put.assert_not_called()
+        with create_session() as session:
+            tis = scheduler._process_task_instances(dag, session=session)
+            self.assertEqual(len(tis), 0)
 
     def test_scheduler_do_not_schedule_too_early(self):
         dag = DAG(
@@ -1458,10 +1458,9 @@ class SchedulerJobTest(unittest.TestCase):
         dr = scheduler.create_dag_run(dag)
         self.assertIsNone(dr)
 
-        mock_list = Mock()
-        scheduler._process_task_instances(dag, task_instances_list=mock_list)
-
-        mock_list.put.assert_not_called()
+        with create_session() as session:
+            tis = scheduler._process_task_instances(dag, session=session)
+            self.assertEqual(len(tis), 0)
 
     def test_scheduler_do_not_schedule_without_tasks(self):
         dag = DAG(
@@ -1504,10 +1503,9 @@ class SchedulerJobTest(unittest.TestCase):
         session.commit()
         session.close()
 
-        mock_list = Mock()
-        scheduler._process_task_instances(dag, task_instances_list=mock_list)
-
-        mock_list.put.assert_not_called()
+        with create_session() as session:
+            tis = scheduler._process_task_instances(dag, session=session)
+            self.assertEqual(len(tis), 0)
 
     def test_scheduler_add_new_task(self):
         """
@@ -1542,8 +1540,8 @@ class SchedulerJobTest(unittest.TestCase):
             dag=dag,
             owner='airflow')
 
-        task_instances_list = Mock()
-        scheduler._process_task_instances(dag, task_instances_list=task_instances_list)
+        with create_session() as session:
+            scheduler._process_task_instances(dag, session=session)
 
         tis = dr.get_task_instances()
         self.assertEqual(len(tis), 2)
@@ -1683,14 +1681,14 @@ class SchedulerJobTest(unittest.TestCase):
         # Reduce max_active_runs to 1
         dag.max_active_runs = 1
 
-        task_instances_list = Mock()
         # and schedule them in, so we can check how many
         # tasks are put on the task_instances_list (should be one, not 3)
-        scheduler._process_task_instances(dag, task_instances_list=task_instances_list)
-
-        task_instances_list.append.assert_called_with(
-            (dag.dag_id, dag_task1.task_id, DEFAULT_DATE, TRY_NUMBER)
-        )
+        with create_session() as session:
+            tis = scheduler._process_task_instances(dag, session=session)
+            self.assertEqual(
+                list(map(lambda ti: ti.key, tis)),
+                [(dag.dag_id, dag_task1.task_id, DEFAULT_DATE, TRY_NUMBER)]
+            )
 
     @patch.object(TI, 'pool_full')
     def test_scheduler_verify_pool_full(self, mock_pool_full):
@@ -1725,15 +1723,13 @@ class SchedulerJobTest(unittest.TestCase):
         self.assertEqual(dr.execution_date, DEFAULT_DATE)
         dr = scheduler.create_dag_run(dag)
         self.assertIsNotNone(dr)
-        task_instances_list = []
-        scheduler._process_task_instances(dag, task_instances_list=task_instances_list)
+        with create_session() as session:
+            task_instances_list = scheduler._process_task_instances(dag, session=session)
         self.assertEqual(len(task_instances_list), 2)
         dagbag = self._make_simple_dag_bag([dag])
 
         # Recreated part of the scheduler here, to kick off tasks -> executor
-        for ti_key in task_instances_list:
-            task = dag.get_task(ti_key[1])
-            ti = TI(task, ti_key[2])
+        for ti in task_instances_list:
             # Task starts out in the scheduled state. All tasks in the
             # scheduled state will be sent to the executor
             ti.state = State.SCHEDULED
@@ -2094,8 +2090,7 @@ class SchedulerJobTest(unittest.TestCase):
                 pass
 
         ti_tuple = six.next(six.itervalues(executor.queued_tasks))
-        (command, priority, queue, simple_ti) = ti_tuple
-        ti = simple_ti.construct_task_instance()
+        (command, priority, queue, ti) = ti_tuple
         ti.task = dag_task1
 
         self.assertEqual(ti.try_number, 1)

@@ -37,6 +37,7 @@ from collections import Iterable
 import os
 import re
 import signal
+import subprocess
 
 from jinja2 import Template
 

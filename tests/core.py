@@ -963,10 +963,8 @@ class CoreTest(unittest.TestCase):
                                      execution_date=utc_now,
                                      dag=self.dag)
         task.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
-        dag_runs = models.DagRun.find(dag_id='example_bash_operator',
-                                      run_id=run_id)
-        self.assertEqual(len(dag_runs), 1)
-        dag_run = dag_runs[0]
+        dag_run = models.DagRun.find(dag_id='example_bash_operator',
+                                     run_id=run_id).one_or_none()
         self.assertEqual(dag_run.execution_date, utc_now)
 
     def test_trigger_dagrun_with_str_execution_date(self):
@@ -985,10 +983,8 @@ class CoreTest(unittest.TestCase):
             execution_date=utc_now_str,
             dag=self.dag)
         task.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, ignore_ti_state=True)
-        dag_runs = models.DagRun.find(dag_id='example_bash_operator',
-                                      run_id=run_id)
-        self.assertEqual(len(dag_runs), 1)
-        dag_run = dag_runs[0]
+        dag_run = models.DagRun.find(dag_id='example_bash_operator',
+                                     run_id=run_id).one_or_none()
         self.assertEqual(dag_run.execution_date.isoformat(), utc_now_str)
 
     def test_trigger_dagrun_with_templated_execution_date(self):

@@ -727,7 +727,8 @@ class TestKubernetesWorkerConfiguration(unittest.TestCase):
         ]
         self.assertEqual(2, len(volume_mounts))
 
-        self.assertCountEqual(
+        six.assertCountEqual(
+            self,
             [
                 {
                     'mountPath': '/usr/local/airflow/airflow.cfg',
